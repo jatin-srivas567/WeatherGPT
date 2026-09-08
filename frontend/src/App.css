@@ -497,3 +497,94 @@ body {
 .chat-input button:hover {
   opacity: 0.9;
 }
+/* Travel Decision */
+
+.travel-section {
+  background: white;
+  border-radius: 20px;
+  padding: 25px;
+  margin-bottom: 30px;
+  border: 1px solid #e4e7ee;
+}
+
+.travel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.travel-header h2 {
+  margin-bottom: 5px;
+  color:#1f2937;
+}
+
+.travel-header p {
+  color: #687386;
+  margin:0;
+}
+
+.travel-score {
+  font-size: 32px;
+  font-weight: bold;
+}
+
+.travel-score span {
+  font-size: 16px;
+  color: #687386;
+  margin-left: 3px;
+}
+
+.travel-status {
+  padding: 14px;
+  border-radius: 12px;
+  background: #f6f8fc;
+  font-weight: bold;
+  margin-bottom: 20px;
+}
+
+.travel-factors {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 15px;
+}
+
+.travel-factor {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 15px;
+  background: #f6f8fc;
+  border-radius: 12px;
+}
+
+.travel-factor span {
+  font-size: 25px;
+}
+
+.travel-factor strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.travel-factor p {
+  margin: 0;
+  color: #687386;
+}
+
+
+/* Mobile */
+@media (max-width: 700px) {
+
+  .travel-header {
+    align-items: flex-start;
+  }
+
+  .travel-score {
+    font-size: 26px;
+  }
+
+  .travel-factors {
+    grid-template-columns: 1fr;
+  }
+}
