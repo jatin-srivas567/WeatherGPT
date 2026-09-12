@@ -1,19 +1,22 @@
 import { useState } from "react";
 import "./App.css";
 
+// =========================
+// DEPLOYED BACKEND URL
+// =========================
+const API_BASE_URL = "https://weathergpt-backend-kid2.onrender.com";
+
 function App() {
   const [city, setCity] = useState("Kanpur");
   const [weather, setWeather] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
   const [chatMessage, setChatMessage] = useState("");
   const [chatResponse, setChatResponse] = useState("");
 
   // =========================
   // SEARCH WEATHER BY CITY
   // =========================
-
   const searchWeather = async () => {
     if (!city.trim()) {
       setError("Please enter a city name.");
@@ -25,7 +28,7 @@ function App() {
 
     try {
       const response = await fetch(
-        `http://127.0.0.1:8000/weather?city=${encodeURIComponent(city)}`
+        `${API_BASE_URL}/weather?city=${encodeURIComponent(city)}`
       );
 
       if (!response.ok) {
@@ -48,7 +51,6 @@ function App() {
   // =========================
   // WEATHER EMOJI
   // =========================
-
   const getWeatherEmoji = (weatherText) => {
     if (!weatherText) return "🌤️";
 
@@ -68,7 +70,6 @@ function App() {
   // =========================
   // FORMAT DATE
   // =========================
-
   const formatDate = (dateString) => {
     const date = new Date(dateString);
 
@@ -82,23 +83,20 @@ function App() {
   // =========================
   // WEATHERGPT CHATBOT
   // =========================
-
   const askWeatherGPT = async () => {
-  if (!chatMessage.trim()) return;
+    if (!chatMessage.trim()) return;
 
-  if (!weather) {
-    setChatResponse("Please search for a city first.");
-    return;
-  }
+    if (!weather) {
+      setChatResponse("Please search for a city first.");
+      return;
+    }
 
-  console.log("Sending chat request...");
-  console.log("Message:", chatMessage);
-  console.log("City:", weather.city);
+    console.log("Sending chat request...");
+    console.log("Message:", chatMessage);
+    console.log("City:", weather.city);
 
-  try {
-    const response = await fetch(
-      "http://127.0.0.1:8000/chat",
-      {
+    try {
+      const response = await fetch(`${API_BASE_URL}/chat`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -107,41 +105,33 @@ function App() {
           message: chatMessage,
           city: weather.city,
         }),
+      });
+
+      console.log("Response status:", response.status);
+
+      const data = await response.json();
+
+      console.log("Backend response:", data);
+
+      if (!response.ok) {
+        throw new Error(data.detail || "Backend returned an error");
       }
-    );
 
-    console.log("Response status:", response.status);
+      setChatResponse(data.response);
+      setChatMessage("");
+    } catch (error) {
+      console.error("CHAT ERROR:", error);
 
-    const data = await response.json();
-
-    console.log("Backend response:", data);
-
-    if (!response.ok) {
-      throw new Error(
-        data.detail || "Backend returned an error"
-      );
+      setChatResponse(`❌ Error: ${error.message}`);
     }
+  };
 
-    setChatResponse(data.response);
-    setChatMessage("");
-
-  } catch (error) {
-    console.error("CHAT ERROR:", error);
-
-    setChatResponse(
-      `❌ Error: ${error.message}`
-    );
-  }
-};
   // =========================
   // MY LOCATION
   // =========================
-
   const getMyLocationWeather = () => {
     if (!navigator.geolocation) {
-      setError(
-        "Geolocation is not supported by your browser."
-      );
+      setError("Geolocation is not supported by your browser.");
       return;
     }
 
@@ -155,7 +145,7 @@ function App() {
 
         try {
           const response = await fetch(
-            `http://127.0.0.1:8000/weather/location?latitude=${latitude}&longitude=${longitude}`
+            `${API_BASE_URL}/weather/location?latitude=${latitude}&longitude=${longitude}`
           );
 
           if (!response.ok) {
@@ -176,7 +166,6 @@ function App() {
           setLoading(false);
         }
       },
-
       () => {
         setError(
           "Location permission denied. Please allow location access."
@@ -190,7 +179,6 @@ function App() {
   // =========================
   // UI
   // =========================
-
   return (
     <div className="app">
 
@@ -198,6 +186,7 @@ function App() {
 
       <header className="top-header">
         <h1>🌦️ WeatherGPT</h1>
+
         <p>Your AI-powered weather companion</p>
       </header>
 
@@ -292,6 +281,7 @@ function App() {
             <div className="weather-details">
 
               <div className="detail">
+
                 <span>💧</span>
 
                 <div>
@@ -301,9 +291,11 @@ function App() {
                     {weather.current.humidity}%
                   </strong>
                 </div>
+
               </div>
 
               <div className="detail">
+
                 <span>💨</span>
 
                 <div>
@@ -313,9 +305,11 @@ function App() {
                     {weather.current.wind_speed} km/h
                   </strong>
                 </div>
+
               </div>
 
               <div className="detail">
+
                 <span>🌧️</span>
 
                 <div>
@@ -325,6 +319,7 @@ function App() {
                     {weather.current.precipitation} mm
                   </strong>
                 </div>
+
               </div>
 
             </div>
@@ -343,10 +338,12 @@ function App() {
 
                   {weather.alerts.map(
                     (alert, index) => (
+
                       <div
                         className="alert-card"
                         key={index}
                       >
+
                         <strong>
                           {alert.type}
                         </strong>
@@ -354,7 +351,9 @@ function App() {
                         <p>
                           {alert.message}
                         </p>
+
                       </div>
+
                     )
                   )}
 
@@ -412,9 +411,7 @@ function App() {
                   </strong>
 
                   <p>
-                    {weather.forecast[0]
-                      .rain_probability}
-                    %
+                    {weather.forecast[0].rain_probability}%
                   </p>
 
                 </div>
@@ -514,11 +511,9 @@ function App() {
                     </h3>
 
                     <div className="forecast-icon">
-
                       {getWeatherEmoji(
                         day.weather
                       )}
-
                     </div>
 
                     <p className="forecast-condition">
@@ -590,11 +585,9 @@ function App() {
               </div>
 
               {chatResponse && (
-
                 <div className="bot-message response">
                   {chatResponse}
                 </div>
-
               )}
 
             </div>
@@ -609,11 +602,9 @@ function App() {
                   setChatMessage(e.target.value)
                 }
                 onKeyDown={(e) => {
-
                   if (e.key === "Enter") {
                     askWeatherGPT();
                   }
-
                 }}
               />
 
