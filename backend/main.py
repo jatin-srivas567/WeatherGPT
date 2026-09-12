@@ -1,10 +1,13 @@
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 import httpx
 
 
-# Create FastAPI application
+# =========================================================
+# CREATE FASTAPI APPLICATION
+# =========================================================
+
 app = FastAPI(
     title="WeatherGPT API",
     description="Backend API for WeatherGPT",
@@ -12,27 +15,36 @@ app = FastAPI(
 )
 
 
-# Allow React frontend to communicate with backend
+# =========================================================
+# CORS
+# =========================================================
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173"
-    ],
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "https://weather-gpt-blush-alpha.vercel.app"
+],
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["*"]
 )
-# ---------------------------------------------
+
+
+# =========================================================
 # CHAT REQUEST MODEL
-# ---------------------------------------------
+# =========================================================
 
 class ChatRequest(BaseModel):
     message: str
     city: str
 
 
-# Convert weather codes into readable descriptions
+# =========================================================
+# WEATHER CODE → DESCRIPTION
+# =========================================================
+
 def get_weather_description(weather_code: int) -> str:
 
     weather_codes = {
@@ -68,7 +80,10 @@ def get_weather_description(weather_code: int) -> str:
     return weather_codes.get(weather_code, "Unknown weather")
 
 
-# Find latitude and longitude of a city
+# =========================================================
+# GET CITY COORDINATES
+# =========================================================
+
 async def get_coordinates(city: str):
 
     url = "https://geocoding-api.open-meteo.com/v1/search"
@@ -80,7 +95,7 @@ async def get_coordinates(city: str):
         "format": "json"
     }
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=15) as client:
 
         response = await client.get(
             url,
@@ -112,7 +127,10 @@ async def get_coordinates(city: str):
     }
 
 
-# Get raw weather information
+# =========================================================
+# GET WEATHER DATA FROM OPEN-METEO
+# =========================================================
+
 async def get_weather(latitude: float, longitude: float):
 
     url = "https://api.open-meteo.com/v1/forecast"
@@ -150,7 +168,7 @@ async def get_weather(latitude: float, longitude: float):
         "forecast_days": 7
     }
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=15) as client:
 
         response = await client.get(
             url,
@@ -167,43 +185,57 @@ async def get_weather(latitude: float, longitude: float):
         return response.json()
 
 
-# Process raw weather data
+# =========================================================
+# PROCESS WEATHER DATA
+# =========================================================
+
 def process_weather(weather_data):
 
     current = weather_data["current"]
 
-
-    # -----------------------------------------
+    # -----------------------------------------------------
     # CURRENT WEATHER
-    # -----------------------------------------
+    # -----------------------------------------------------
 
     current_weather = {
 
-        "temperature":
-            current["temperature_2m"],
+        "temperature": current.get(
+            "temperature_2m",
+            0
+        ),
 
-        "feels_like":
-            current["apparent_temperature"],
+        "feels_like": current.get(
+            "apparent_temperature",
+            0
+        ),
 
-        "humidity":
-            current["relative_humidity_2m"],
+        "humidity": current.get(
+            "relative_humidity_2m",
+            0
+        ),
 
-        "precipitation":
-            current["precipitation"],
+        "precipitation": current.get(
+            "precipitation",
+            0
+        ),
 
-        "wind_speed":
-            current["wind_speed_10m"],
+        "wind_speed": current.get(
+            "wind_speed_10m",
+            0
+        ),
 
-        "weather":
-            get_weather_description(
-                current["weather_code"]
+        "weather": get_weather_description(
+            current.get(
+                "weather_code",
+                0
             )
+        )
     }
 
 
-    # -----------------------------------------
-    # 7-DAY FORECAST
-    # -----------------------------------------
+    # -----------------------------------------------------
+    # 7 DAY FORECAST
+    # -----------------------------------------------------
 
     daily = weather_data["daily"]
 
@@ -213,13 +245,11 @@ def process_weather(weather_data):
 
         day = {
 
-            "date":
-                daily["time"][i],
+            "date": daily["time"][i],
 
-            "weather":
-                get_weather_description(
-                    daily["weather_code"][i]
-                ),
+            "weather": get_weather_description(
+                daily["weather_code"][i]
+            ),
 
             "max_temperature":
                 daily["temperature_2m_max"][i],
@@ -237,27 +267,40 @@ def process_weather(weather_data):
         forecast.append(day)
 
 
-    # -----------------------------------------
+    # -----------------------------------------------------
     # BASIC VALUES
-    # -----------------------------------------
+    # -----------------------------------------------------
 
-    temperature = current["temperature_2m"]
+    temperature = current.get(
+        "temperature_2m",
+        0
+    )
 
-    rain_probability = forecast[0]["rain_probability"]
+    rain_probability = forecast[0].get(
+        "rain_probability",
+        0
+    )
 
-    wind_speed = current["wind_speed_10m"]
+    wind_speed = current.get(
+        "wind_speed_10m",
+        0
+    )
 
-    weather_code = current["weather_code"]
+    weather_code = current.get(
+        "weather_code",
+        0
+    )
 
 
-    # -----------------------------------------
+    # =====================================================
     # RECOMMENDATIONS
-    # -----------------------------------------
+    # =====================================================
 
     recommendations = []
 
 
     # Rain recommendation
+
     if rain_probability >= 70:
 
         recommendations.append(
@@ -279,6 +322,7 @@ def process_weather(weather_data):
 
 
     # Temperature recommendation
+
     if temperature >= 35:
 
         recommendations.append(
@@ -294,6 +338,7 @@ def process_weather(weather_data):
 
 
     # Thunderstorm recommendation
+
     if weather_code >= 95:
 
         recommendations.append(
@@ -302,14 +347,15 @@ def process_weather(weather_data):
         )
 
 
-    # -----------------------------------------
+    # =====================================================
     # WEATHER ALERTS
-    # -----------------------------------------
+    # =====================================================
 
     alerts = []
 
 
     # Rain alert
+
     if rain_probability >= 70:
 
         alerts.append({
@@ -322,6 +368,7 @@ def process_weather(weather_data):
 
 
     # Extreme heat alert
+
     if temperature >= 40:
 
         alerts.append({
@@ -335,6 +382,7 @@ def process_weather(weather_data):
 
 
     # Cold alert
+
     if temperature <= 10:
 
         alerts.append({
@@ -348,6 +396,7 @@ def process_weather(weather_data):
 
 
     # Thunderstorm alert
+
     if weather_code >= 95:
 
         alerts.append({
@@ -360,14 +409,15 @@ def process_weather(weather_data):
         })
 
 
-    # -----------------------------------------
-    # TRAVEL DECISION SCORE
-    # -----------------------------------------
+    # =====================================================
+    # TRAVEL SCORE
+    # =====================================================
 
     travel_score = 100
 
 
     # Rain penalty
+
     if rain_probability >= 80:
 
         travel_score -= 35
@@ -386,6 +436,7 @@ def process_weather(weather_data):
 
 
     # Temperature penalty
+
     if temperature >= 40:
 
         travel_score -= 25
@@ -400,12 +451,14 @@ def process_weather(weather_data):
 
 
     # Thunderstorm penalty
+
     if weather_code >= 95:
 
         travel_score -= 30
 
 
     # Wind penalty
+
     if wind_speed >= 50:
 
         travel_score -= 20
@@ -415,7 +468,8 @@ def process_weather(weather_data):
         travel_score -= 10
 
 
-    # Keep score between 0 and 100
+    # Keep between 0 and 100
+
     travel_score = max(
         0,
         min(100, travel_score)
@@ -423,6 +477,7 @@ def process_weather(weather_data):
 
 
     # Travel status
+
     if travel_score >= 75:
 
         travel_status = "Good for travel"
@@ -436,9 +491,9 @@ def process_weather(weather_data):
         travel_status = "Not recommended"
 
 
-    # -----------------------------------------
-    # FINAL PROCESSED DATA
-    # -----------------------------------------
+    # =====================================================
+    # FINAL WEATHER DATA
+    # =====================================================
 
     return {
 
@@ -462,9 +517,9 @@ def process_weather(weather_data):
     }
 
 
-# ---------------------------------------------
+# =========================================================
 # HOME ENDPOINT
-# ---------------------------------------------
+# =========================================================
 
 @app.get("/")
 async def home():
@@ -479,67 +534,83 @@ async def home():
     }
 
 
-# ---------------------------------------------
-# SEARCH WEATHER BY CITY
-# ---------------------------------------------
+# =========================================================
+# WEATHER BY CITY
+# =========================================================
 
 @app.get("/weather")
 async def weather(city: str):
 
-    # Find city coordinates
-    location = await get_coordinates(city)
+    try:
+
+        # Get coordinates
+
+        location = await get_coordinates(city)
 
 
-    # Get weather
-    weather_data = await get_weather(
-        location["latitude"],
-        location["longitude"]
-    )
+        # Get weather
 
+        weather_data = await get_weather(
 
-    # Process weather
-    processed = process_weather(
-        weather_data
-    )
-
-
-    return {
-
-        "city":
-            location["name"],
-
-        "country":
-            location["country"],
-
-        "latitude":
             location["latitude"],
-
-        "longitude":
-            location["longitude"],
-
-        "current":
-            processed["current"],
-
-        "forecast":
-            processed["forecast"],
-
-        "recommendations":
-            processed["recommendations"],
-
-        "alerts":
-            processed["alerts"],
-
-        "travel_score":
-            processed["travel_score"],
-
-        "travel_status":
-            processed["travel_status"]
-    }
+            location["longitude"]
+        )
 
 
-# ---------------------------------------------
-# SEARCH WEATHER USING GPS LOCATION
-# ---------------------------------------------
+        # Process weather
+
+        processed = process_weather(
+            weather_data
+        )
+
+
+        return {
+
+            "city":
+                location["name"],
+
+            "country":
+                location["country"],
+
+            "latitude":
+                location["latitude"],
+
+            "longitude":
+                location["longitude"],
+
+            "current":
+                processed["current"],
+
+            "forecast":
+                processed["forecast"],
+
+            "recommendations":
+                processed["recommendations"],
+
+            "alerts":
+                processed["alerts"],
+
+            "travel_score":
+                processed["travel_score"],
+
+            "travel_status":
+                processed["travel_status"]
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Unable to get weather: {str(e)}"
+        )
+
+
+# =========================================================
+# WEATHER USING GPS LOCATION
+# =========================================================
 
 @app.get("/weather/location")
 async def weather_by_location(
@@ -549,7 +620,8 @@ async def weather_by_location(
 
     try:
 
-        # Get weather using GPS coordinates
+        # Get weather
+
         weather_data = await get_weather(
             latitude,
             longitude
@@ -557,16 +629,17 @@ async def weather_by_location(
 
 
         # Process weather
+
         processed = process_weather(
             weather_data
         )
 
 
-        # -------------------------------------
+        # -------------------------------------------------
         # REVERSE GEOCODING
-        # -------------------------------------
+        # -------------------------------------------------
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=15) as client:
 
             response = await client.get(
 
@@ -594,9 +667,9 @@ async def weather_by_location(
             location_data = response.json()
 
 
-        # -------------------------------------
-        # FIND CITY NAME
-        # -------------------------------------
+        # -------------------------------------------------
+        # FIND CITY
+        # -------------------------------------------------
 
         if (
             "results" in location_data
@@ -606,11 +679,8 @@ async def weather_by_location(
             location = location_data["results"][0]
 
             city = (
-
                 location.get("name")
-
                 or location.get("admin1")
-
                 or "Your Location"
             )
 
@@ -622,13 +692,12 @@ async def weather_by_location(
         else:
 
             city = "Your Location"
-
             country = ""
 
 
-        # -------------------------------------
-        # FINAL RESPONSE
-        # -------------------------------------
+        # -------------------------------------------------
+        # RETURN DATA
+        # -------------------------------------------------
 
         return {
 
@@ -664,6 +733,718 @@ async def weather_by_location(
         }
 
 
+    except HTTPException:
+        raise
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=500,
+            detail=
+                f"Unable to get location weather: {str(e)}"
+        )
+
+
+# =========================================================
+# WEATHERGPT LOCAL CHATBOT
+# =========================================================
+
+@app.post("/chat")
+async def chat(request: ChatRequest):
+
+    try:
+
+        # =================================================
+        # 1. CLEAN USER MESSAGE
+        # =================================================
+
+        original_message = request.message.strip()
+
+        message = original_message.lower()
+
+        # Remove common punctuation
+
+        for symbol in [
+            "?",
+            "!",
+            ",",
+            ".",
+            ":",
+            ";"
+        ]:
+
+            message = message.replace(
+                symbol,
+                " "
+            )
+
+        message = " ".join(
+            message.split()
+        )
+
+
+        # =================================================
+        # 2. GET CITY COORDINATES
+        # =================================================
+
+        location = await get_coordinates(
+            request.city
+        )
+
+
+        # =================================================
+        # 3. GET LIVE WEATHER
+        # =================================================
+
+        weather_data = await get_weather(
+
+            location["latitude"],
+            location["longitude"]
+        )
+
+
+        # =================================================
+        # 4. PROCESS WEATHER
+        # =================================================
+
+        processed = process_weather(
+            weather_data
+        )
+
+
+        current = processed["current"]
+
+        forecast = processed["forecast"]
+
+        travel_score = processed["travel_score"]
+
+        travel_status = processed["travel_status"]
+
+
+        # =================================================
+        # 5. CURRENT WEATHER VALUES
+        # =================================================
+
+        temperature = current.get(
+            "temperature",
+            0
+        )
+
+        feels_like = current.get(
+            "feels_like",
+            0
+        )
+
+        humidity = current.get(
+            "humidity",
+            0
+        )
+
+        wind_speed = current.get(
+            "wind_speed",
+            0
+        )
+
+        precipitation = current.get(
+            "precipitation",
+            0
+        )
+
+        weather_description = current.get(
+            "weather",
+            "Unknown weather"
+        )
+
+
+        # =================================================
+        # 6. FORECAST VALUES
+        # =================================================
+
+        today = (
+            forecast[0]
+            if len(forecast) > 0
+            else {}
+        )
+
+        tomorrow = (
+            forecast[1]
+            if len(forecast) > 1
+            else today
+        )
+
+
+        today_rain = today.get(
+            "rain_probability",
+            0
+        )
+
+        tomorrow_rain = tomorrow.get(
+            "rain_probability",
+            0
+        )
+
+        tomorrow_max = tomorrow.get(
+            "max_temperature",
+            0
+        )
+
+        tomorrow_min = tomorrow.get(
+            "min_temperature",
+            0
+        )
+
+        tomorrow_weather = tomorrow.get(
+            "weather",
+            "Unknown"
+        )
+
+
+        # =================================================
+        # 7. LANGUAGE DETECTION
+        # =================================================
+
+        hindi_words = [
+
+            "क्या",
+            "कैसे",
+            "कैसा",
+            "कब",
+            "है",
+            "होगा",
+            "होगी",
+            "बारिश",
+            "मौसम",
+            "गर्मी",
+            "ठंड",
+            "तापमान",
+            "छतरी",
+            "जाना",
+            "चाहिए",
+            "आज",
+            "कल",
+            "बाहर",
+            "यात्रा"
+        ]
+
+
+        hinglish_words = [
+
+            "kya",
+            "kaise",
+            "kaisa",
+            "kab",
+            "hai",
+            "hoga",
+            "hogi",
+            "baarish",
+            "barish",
+            "mausam",
+            "garmi",
+            "thand",
+            "temperature",
+            "temp",
+            "chhatri",
+            "jana",
+            "jaana",
+            "chahiye",
+            "aaj",
+            "kal",
+            "bahar",
+            "bahar",
+            "travel",
+            "ghoom",
+            "ghumna",
+            "safe",
+            "sakta",
+            "sakti",
+            "kar",
+            "karna",
+            "raha",
+            "rahi",
+            "hoga"
+        ]
+
+
+        has_hindi = any(
+
+            word in original_message
+
+            for word in hindi_words
+        )
+
+
+        hinglish_count = sum(
+
+            word in message
+
+            for word in hinglish_words
+        )
+
+
+        if has_hindi:
+
+            language = "hindi"
+
+        elif hinglish_count >= 1:
+
+            language = "hinglish"
+
+        else:
+
+            language = "english"
+
+
+        # =================================================
+        # 8. INTENT DETECTION
+        # =================================================
+
+        # -------------------------------------------------
+        # RAIN INTENT
+        # -------------------------------------------------
+
+        rain_words = [
+
+            "rain",
+            "raining",
+            "baarish",
+            "barish",
+            "बारिश",
+            "umbrella",
+            "chhatri",
+            "छतरी"
+        ]
+
+
+        is_rain_question = any(
+
+            word in message
+            or word in original_message
+
+            for word in rain_words
+        )
+
+
+        # -------------------------------------------------
+        # TEMPERATURE INTENT
+        # -------------------------------------------------
+
+        temperature_words = [
+
+            "temperature",
+            "temp",
+            "degree",
+            "degrees",
+            "तापमान",
+            "गर्मी",
+            "ठंड",
+            "kitna garam",
+            "kitni garmi"
+        ]
+
+
+        is_temperature_question = any(
+
+            word in message
+            or word in original_message
+
+            for word in temperature_words
+        )
+
+
+        # -------------------------------------------------
+        # TRAVEL INTENT
+        # -------------------------------------------------
+
+        travel_words = [
+
+            "travel",
+            "trip",
+            "journey",
+            "bahar jana",
+            "bahar ja",
+            "ghoom",
+            "ghumna",
+            "jana chahiye",
+            "go outside",
+            "outside",
+            "यात्रा",
+            "बाहर जाना",
+            "बाहर",
+            "घूमना"
+        ]
+
+
+        is_travel_question = any(
+
+            word in message
+            or word in original_message
+
+            for word in travel_words
+        )
+
+
+        # -------------------------------------------------
+        # FORECAST INTENT
+        # -------------------------------------------------
+
+        forecast_words = [
+
+            "forecast",
+            "tomorrow",
+            "today",
+            "next",
+            "kal",
+            "aaj",
+            "कल",
+            "आज",
+            "week",
+            "weekly",
+            "7 day",
+            "7-day",
+            "hoga",
+            "hogi"
+        ]
+
+
+        is_forecast_question = any(
+
+            word in message
+            or word in original_message
+
+            for word in forecast_words
+        )
+
+
+        # -------------------------------------------------
+        # WEATHER INTENT
+        # -------------------------------------------------
+
+        weather_words = [
+
+            "weather",
+            "mausam",
+            "mausam kaisa",
+            "mausam kaise",
+            "weather kaisa",
+            "weather kaise",
+            "कैसा मौसम",
+            "मौसम",
+            "मौसम कैसा",
+            "मौसम कैसा है"
+        ]
+
+
+        is_weather_question = any(
+
+            word in message
+            or word in original_message
+
+            for word in weather_words
+        )
+
+
+        # =================================================
+        # 9. RESPONSE GENERATION
+        # =================================================
+
+        response_text = ""
+
+
+        # =================================================
+        # WEATHER RESPONSE
+        # =================================================
+
+        if is_weather_question:
+
+            if language == "hindi":
+
+                response_text = (
+                    f"{location['name']} में अभी मौसम "
+                    f"{weather_description} है। "
+                    f"तापमान {temperature}°C है और "
+                    f"महसूस होने वाला तापमान {feels_like}°C है। "
+                    f"नमी {humidity}% और हवा की गति "
+                    f"{wind_speed} km/h है।"
+                )
+
+
+            elif language == "hinglish":
+
+                response_text = (
+                    f"{location['name']} mein abhi "
+                    f"{weather_description} hai. "
+                    f"Temperature {temperature}°C hai aur "
+                    f"feels-like temperature {feels_like}°C hai. "
+                    f"Humidity {humidity}% hai aur "
+                    f"wind speed {wind_speed} km/h hai."
+                )
+
+
+            else:
+
+                response_text = (
+                    f"The current weather in "
+                    f"{location['name']} is "
+                    f"{weather_description}. "
+                    f"The temperature is {temperature}°C "
+                    f"and it feels like {feels_like}°C. "
+                    f"Humidity is {humidity}% and "
+                    f"wind speed is {wind_speed} km/h."
+                )
+
+
+        # =================================================
+        # RAIN RESPONSE
+        # =================================================
+
+        elif is_rain_question:
+
+            if (
+                "tomorrow" in message
+                or "kal" in message
+                or "कल" in original_message
+            ):
+
+                rain_value = tomorrow_rain
+
+                if language == "hindi":
+
+                    response_text = (
+                        f"कल {location['name']} में बारिश "
+                        f"की संभावना {rain_value}% है। "
+                        f"कल का मौसम {tomorrow_weather} रहने "
+                        f"की संभावना है।"
+                    )
+
+
+                elif language == "hinglish":
+
+                    response_text = (
+                        f"Kal {location['name']} mein "
+                        f"baarish ki probability "
+                        f"{rain_value}% hai. "
+                        f"Kal weather {tomorrow_weather} "
+                        f"rehne ka chance hai."
+                    )
+
+
+                else:
+
+                    response_text = (
+                        f"There is a {rain_value}% chance "
+                        f"of rain in {location['name']} tomorrow. "
+                        f"The expected weather is "
+                        f"{tomorrow_weather}."
+                    )
+
+
+            else:
+
+                rain_value = today_rain
+
+                if language == "hindi":
+
+                    response_text = (
+                        f"आज {location['name']} में बारिश "
+                        f"की संभावना {rain_value}% है।"
+                    )
+
+
+                elif language == "hinglish":
+
+                    response_text = (
+                        f"Aaj {location['name']} mein "
+                        f"baarish ki probability "
+                        f"{rain_value}% hai."
+                    )
+
+
+                else:
+
+                    response_text = (
+                        f"The chance of rain in "
+                        f"{location['name']} today is "
+                        f"{rain_value}%."
+                    )
+
+
+        # =================================================
+        # TEMPERATURE RESPONSE
+        # =================================================
+
+        elif is_temperature_question:
+
+            if language == "hindi":
+
+                response_text = (
+                    f"{location['name']} में अभी तापमान "
+                    f"{temperature}°C है और महसूस होने वाला "
+                    f"तापमान {feels_like}°C है।"
+                )
+
+
+            elif language == "hinglish":
+
+                response_text = (
+                    f"{location['name']} mein abhi "
+                    f"temperature {temperature}°C hai. "
+                    f"Feels-like temperature {feels_like}°C hai."
+                )
+
+
+            else:
+
+                response_text = (
+                    f"The current temperature in "
+                    f"{location['name']} is {temperature}°C, "
+                    f"with a feels-like temperature of "
+                    f"{feels_like}°C."
+                )
+
+
+        # =================================================
+        # TRAVEL RESPONSE
+        # =================================================
+
+        elif is_travel_question:
+
+            if language == "hindi":
+
+                response_text = (
+                    f"{location['name']} के लिए Travel Score "
+                    f"{travel_score}/100 है। "
+                    f"स्थिति: {travel_status}। "
+                    f"आज का मौसम {weather_description} है "
+                    f"और बारिश की संभावना {today_rain}% है।"
+                )
+
+
+            elif language == "hinglish":
+
+                response_text = (
+                    f"{location['name']} ka Travel Score "
+                    f"{travel_score}/100 hai. "
+                    f"Status: {travel_status}. "
+                    f"Aaj weather {weather_description} hai "
+                    f"aur baarish ki probability "
+                    f"{today_rain}% hai."
+                )
+
+
+            else:
+
+                response_text = (
+                    f"The Travel Score for "
+                    f"{location['name']} is "
+                    f"{travel_score}/100. "
+                    f"Status: {travel_status}. "
+                    f"Today's weather is "
+                    f"{weather_description} with a "
+                    f"{today_rain}% chance of rain."
+                )
+
+
+        # =================================================
+        # FORECAST RESPONSE
+        # =================================================
+
+        elif is_forecast_question:
+
+            if language == "hindi":
+
+                response_text = (
+                    f"कल {location['name']} में मौसम "
+                    f"{tomorrow_weather} रहने की संभावना है। "
+                    f"तापमान लगभग {tomorrow_min}°C से "
+                    f"{tomorrow_max}°C के बीच रहेगा और "
+                    f"बारिश की संभावना {tomorrow_rain}% है।"
+                )
+
+
+            elif language == "hinglish":
+
+                response_text = (
+                    f"Kal {location['name']} mein weather "
+                    f"{tomorrow_weather} rehne ka chance hai. "
+                    f"Temperature around {tomorrow_min}°C se "
+                    f"{tomorrow_max}°C ke beech rahega aur "
+                    f"baarish ki probability {tomorrow_rain}% hai."
+                )
+
+
+            else:
+
+                response_text = (
+                    f"Tomorrow in {location['name']}, "
+                    f"the expected weather is "
+                    f"{tomorrow_weather}. "
+                    f"Temperature may range from "
+                    f"{tomorrow_min}°C to {tomorrow_max}°C, "
+                    f"with a {tomorrow_rain}% chance of rain."
+                )
+
+
+        # =================================================
+        # GENERAL WEATHER RESPONSE
+        # =================================================
+
+        else:
+
+            if language == "hindi":
+
+                response_text = (
+                    f"{location['name']} में अभी "
+                    f"{weather_description} है और "
+                    f"तापमान {temperature}°C है। "
+                    f"बारिश की संभावना {today_rain}% है। "
+                    f"Travel Score {travel_score}/100 है।"
+                )
+
+
+            elif language == "hinglish":
+
+                response_text = (
+                    f"{location['name']} mein abhi "
+                    f"{weather_description} hai aur "
+                    f"temperature {temperature}°C hai. "
+                    f"Baarish ki probability "
+                    f"{today_rain}% hai. "
+                    f"Travel Score {travel_score}/100 hai."
+                )
+
+
+            else:
+
+                response_text = (
+                    f"In {location['name']}, the current "
+                    f"weather is {weather_description} "
+                    f"with a temperature of {temperature}°C. "
+                    f"The chance of rain is {today_rain}% "
+                    f"and the Travel Score is "
+                    f"{travel_score}/100."
+                )
+
+
+        # =================================================
+        # FINAL CHAT RESPONSE
+        # =================================================
+
+        return {
+
+            "city":
+                location["name"],
+
+            "message":
+                original_message,
+
+            "response":
+                response_text
+        }
+
+
+    except HTTPException:
+        raise
+
     except Exception as e:
 
         raise HTTPException(
@@ -671,244 +1452,5 @@ async def weather_by_location(
             status_code=500,
 
             detail=
-                f"Unable to get location weather: {str(e)}"
-        )
-# ---------------------------------------------
-# WEATHERGPT CHAT ENDPOINT
-# ---------------------------------------------
-
-@app.post("/chat")
-async def chat(request: ChatRequest):
-
-    try:
-
-        # Get coordinates of the city
-        location = await get_coordinates(request.city)
-
-        # Get latest weather data
-        weather_data = await get_weather(
-            location["latitude"],
-            location["longitude"]
-        )
-
-        # Process weather data
-        processed = process_weather(weather_data)
-
-        current = processed["current"]
-
-        tomorrow = processed["forecast"][1]
-
-        travel_score = processed["travel_score"]
-
-        travel_status = processed["travel_status"]
-
-
-        # -----------------------------------------
-        # WEATHER CONTEXT
-        # -----------------------------------------
-
-        message = request.message.lower()
-
-
-        # -----------------------------------------
-        # RAIN QUESTIONS
-        # -----------------------------------------
-
-        if (
-            "rain" in message
-            or "barish" in message
-            or "baarish" in message
-            or "बारिश" in message
-            or "umbrella" in message
-            or "chhata" in message
-        ):
-
-            rain_probability = tomorrow["rain_probability"]
-
-            if rain_probability >= 70:
-
-                response = (
-                    f"🌧️ Yes, there is a high chance of rain "
-                    f"tomorrow in {request.city}. "
-                    f"The rain probability is {rain_probability}%. "
-                    f"Please carry an umbrella."
-                )
-
-            elif rain_probability >= 40:
-
-                response = (
-                    f"🌦️ There is a moderate chance of rain "
-                    f"tomorrow in {request.city}. "
-                    f"The rain probability is {rain_probability}%. "
-                    f"Keeping an umbrella with you would be a good idea."
-                )
-
-            else:
-
-                response = (
-                    f"☀️ The chance of rain tomorrow in "
-                    f"{request.city} is relatively low. "
-                    f"The rain probability is {rain_probability}%."
-                )
-
-
-        # -----------------------------------------
-        # TRAVEL QUESTIONS
-        # -----------------------------------------
-
-        elif (
-            "travel" in message
-            or "trip" in message
-            or "go tomorrow" in message
-            or "ghoom" in message
-            or "ghumna" in message
-            or "bahar" in message
-            or "बाहर" in message
-            or "yatra" in message
-            or "यात्रा" in message
-            or "safar" in message
-            or "सफर" in message
-        ):
-
-            response = (
-                f"🧳 Travel score for {request.city} is "
-                f"{travel_score}/100 — {travel_status}. "
-                f"Tomorrow's rain probability is "
-                f"{tomorrow['rain_probability']}%. "
-                f"The temperature is expected to be around "
-                f"{tomorrow['max_temperature']}°C."
-            )
-
-
-        # -----------------------------------------
-        # TEMPERATURE QUESTIONS
-        # -----------------------------------------
-
-        elif (
-            "temperature" in message
-            or "temp" in message
-            or "taapman" in message
-            or "तापमान" in message
-            or "garmi" in message
-            or "गर्मी" in message
-            or "hot" in message
-            or "garam" in message
-            or "thand" in message
-            or "ठंड" in message
-            or "cold" in message
-        ):
-
-            response = (
-                f"🌡️ The current temperature in "
-                f"{request.city} is "
-                f"{round(current['temperature'])}°C. "
-                f"It feels like "
-                f"{round(current['feels_like'])}°C."
-            )
-
-
-        # -----------------------------------------
-        # CLOTHING QUESTIONS
-        # -----------------------------------------
-
-        elif (
-            "wear" in message
-            or "clothes" in message
-            or "dress" in message
-            or "kapde" in message
-            or "कपड़े" in message
-            or "pehnu" in message
-            or "pahnu" in message
-            or "pehen" in message
-        ):
-
-            temperature = current["temperature"]
-
-            if temperature >= 35:
-
-                response = (
-                    f"👕 It is quite hot in {request.city}, "
-                    f"with a temperature of "
-                    f"{round(temperature)}°C. "
-                    f"Light and breathable cotton clothes "
-                    f"would be suitable."
-                )
-
-            elif temperature >= 25:
-
-                response = (
-                    f"👕 The temperature is around "
-                    f"{round(temperature)}°C. "
-                    f"Light cotton clothes should be comfortable."
-                )
-
-            elif temperature >= 15:
-
-                response = (
-                    f"🧥 The temperature is around "
-                    f"{round(temperature)}°C. "
-                    f"Full-sleeve clothes or a light jacket "
-                    f"would be suitable."
-                )
-
-            else:
-
-                response = (
-                    f"🧥 It is quite cold in {request.city}. "
-                    f"The temperature is around "
-                    f"{round(temperature)}°C. "
-                    f"Warm clothes are recommended."
-                )
-
-
-        # -----------------------------------------
-        # GENERAL WEATHER QUESTION
-        # -----------------------------------------
-
-        elif (
-            "weather" in message
-            or "mausam" in message
-            or "मौसम" in message
-        ):
-
-            response = (
-                f"🌤️ The current weather in {request.city} "
-                f"is {current['weather']}. "
-                f"The temperature is "
-                f"{round(current['temperature'])}°C, "
-                f"humidity is {current['humidity']}%, "
-                f"and wind speed is "
-                f"{current['wind_speed']} km/h."
-            )
-
-
-        # -----------------------------------------
-        # DEFAULT RESPONSE
-        # -----------------------------------------
-
-        else:
-
-            response = (
-                "🤖 I can help you with weather, rain, "
-                "travel, temperature and clothing. "
-                "Try asking: "
-                "'Will it rain tomorrow?', "
-                "'Can I travel tomorrow?', "
-                "'What is the temperature?', "
-                "or 'What should I wear?'"
-            )
-
-
-        return {
-            "city": request.city,
-            "message": request.message,
-            "response": response
-        }
-
-
-    except Exception as e:
-
-        raise HTTPException(
-            status_code=500,
-            detail=f"Unable to process chat request: {str(e)}"
+                f"Unable to process chat request: {str(e)}"
         )
